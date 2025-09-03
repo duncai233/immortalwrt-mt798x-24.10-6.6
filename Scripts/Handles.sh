@@ -30,6 +30,7 @@ if [ -d *"luci-theme-argon"* ]; then
 
 	cd ./luci-theme-argon/
 
+	cp "$GITHUB_WORKSPACE/bg1.jpg" ./htdocs/luci-static/argon/img/bg1.jpg
 	sed -i "/font-weight:/ { /important/! { /\/\*/! s/:.*/: var(--font-weight);/ } }" $(find ./luci-theme-argon -type f -iname "*.css")
 	sed -i "s/primary '.*'/primary '#31a1a1'/; s/'0.2'/'0.5'/; s/'none'/'bing'/; s/'600'/'normal'/" ./luci-app-argon-config/root/etc/config/argon
 
