@@ -17,7 +17,24 @@ sed -i "/set wireless.default_\${dev}.encryption='psk2+ccmp'/a \\\t\t\t\t\t\set 
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
 #修改默认IP地址
-sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $CFG_FILE
+sed -i '/^\s*static\)/,/^;;/c\
+	    static)
+	    local ipad netm
+    	if [ "$1" = "lan" ]; then
+        	ipad=${ipaddr:-"'$WRT_IP'"}
+        	netm=${netmask:-"255.0.0.0"}
+    	else
+        	ipad=${ipaddr:-"172.$((16 + addr_offset)).0.1"}
+        	netm=${netmask:-"255.255.0.0"}
+        	addr_offset=$((addr_offset+1))
+	    fi
+    	uci -q batch <<-EOF
+        	set network.$1.proto='static'
+	        set network.$1.ipaddr='$ipad'
+    	    set network.$1.netmask='$netm'
+	    EOF
+    	[ -e /proc/sys/net/ipv6 ] && uci set network.$1.ip6assign='60'
+	;;' "$CFG_FILE"
 #修改默认主机名
 sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
 
