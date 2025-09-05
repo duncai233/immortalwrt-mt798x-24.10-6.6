@@ -80,9 +80,9 @@ jobs:
           sudo -E timedatectl set-timezone "Asia/Shanghai"
           lsblk -f
           df -h
-          sudo mkdir -p /opt/build_wrt
-          sudo chown $USER:$USER /opt/build_wrt
-          sudo ln -s /opt/build_wrt $GITHUB_WORKSPACE/wrt
+          sudo mkdir -p /mnt/build_wrt
+          sudo chown $USER:$USER /mnt/build_wrt
+          sudo ln -s /mnt/build_wrt $GITHUB_WORKSPACE/wrt
 
       - name: Initialization Values
         run: |
