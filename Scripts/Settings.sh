@@ -8,7 +8,12 @@ sed -i "s/luci-theme-bootstrap/luci-theme-$WRT_THEME/g" $(find ./feeds/luci/coll
 sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" $(find ./feeds/luci/modules/luci-mod-system/ -type f -name "flash.js")
 #添加编译日期标识
 sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ $WRT_MARK-$WRT_DATE')/g" $(find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js")
-
+#替换登录页背景图片
+if [ -f "$GITHUB_WORKSPACE/bg1.jpg" ]; then
+	cp -f "$GITHUB_WORKSPACE/bg1.jpg" ./feeds/luci/themes/luci-theme-argon/htdocs/luci-static/argon/img/bg1.jpg
+	cp -f "$GITHUB_WORKSPACE/bg1.jpg" ./feeds/luci/themes/luci-theme-bootstrap/htdocs/luci-static/bootstrap/bg1.jpg
+	echo "登录页背景图片已替换！"
+fi
 WIFI_FILE="./package/mtk/applications/mtwifi-cfg/files/mtwifi.sh"
 #修改WIFI名称
 sed -i "s/ImmortalWrt/$WRT_SSID/g" $WIFI_FILE
