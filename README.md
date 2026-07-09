@@ -1,26 +1,12 @@
-# 高质量<免费>交流群
-
-点击链接加入群聊【IPQ技术讨论群】：https://qm.qq.com/q/v7nMhzB4oU
-该群为普通交流群。
-
-# 高质量<付费>中转站
-
-点击链接加入群聊【LiBwrt-Ai学习】：https://qm.qq.com/q/HTa7OiWNCU
-该群为AI中转站群。
-
 # CloseWRT-CI
 
 源码：
-
-https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git
 
 https://github.com/Yuzhii0718/immortalwrt-mt798x-6.6-padavanonly.git
 
 # U-BOOT
 
-全新UBOOT支持开源和闭源固件：
-
-https://github.com/VIKINGYFY/UBOOT-CI/releases
+https://github.com/Yuzhii0718/bl-mt798x-dhcpd/
 
 # 注意
 
@@ -39,6 +25,3 @@ workflows——自定义CI配置
 Scripts——自定义脚本
 
 Config——自定义配置
-
-#
-[![Stargazers over time](https://starchart.cc/VIKINGYFY/CloseWRT-CI.svg?variant=adaptive)](https://starchart.cc/VIKINGYFY/CloseWRT-CI)
