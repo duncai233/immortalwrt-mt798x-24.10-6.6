@@ -281,7 +281,6 @@ jobs:
               sbin/devstatus \
               sbin/wifi \
               sbin/mtwifi_cfg \
-              sbin/l1util \
               lib/wifi/mtwifi.sh \
               lib/netifd/wireless/mtwifi.sh \
               etc/hotplug.d/net/10-mtwifi-detect \
@@ -298,6 +297,12 @@ jobs:
             do
               check_mode_in_root "$root" "$path" 755
             done
+
+            if [ -e "$root/sbin/l1util" ]; then
+              check_mode_in_root "$root" sbin/l1util 755
+            else
+              echo "Optional sbin/l1util is not selected by the upstream 360T7 defconfig; skipping."
+            fi
 
             check_link_in_root "$root" etc/rc.d/S19dnsmasq ../init.d/dnsmasq
             check_link_in_root "$root" etc/rc.d/S19dropbear ../init.d/dropbear

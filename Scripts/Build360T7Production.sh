@@ -289,7 +289,6 @@ for path in \
 	sbin/devstatus \
 	sbin/wifi \
 	sbin/mtwifi_cfg \
-	sbin/l1util \
 	lib/wifi/mtwifi.sh \
 	lib/netifd/wireless/mtwifi.sh \
 	etc/hotplug.d/net/10-mtwifi-detect \
@@ -307,6 +306,13 @@ do
 	check_mode "$path" 755
 	stat -c "%a %n" "$ROOTFS_DIR/$path"
 done
+
+if [ -e "$ROOTFS_DIR/sbin/l1util" ]; then
+	check_mode sbin/l1util 755
+	stat -c "%a %n" "$ROOTFS_DIR/sbin/l1util"
+else
+	echo "Optional sbin/l1util is not selected by the upstream 360T7 defconfig; skipping."
+fi
 
 awk '
 	/qihoo,360t7\)/ { in_case = 1 }
@@ -450,7 +456,6 @@ for path in \
 	sbin/devstatus \
 	sbin/wifi \
 	sbin/mtwifi_cfg \
-	sbin/l1util \
 	lib/wifi/mtwifi.sh \
 	lib/netifd/wireless/mtwifi.sh \
 	etc/hotplug.d/net/10-mtwifi-detect \
@@ -469,6 +474,17 @@ do
 	fi
 	stat -c "%a %n" "$SQUASHFS_CHECK/$path"
 done
+
+if [ -e "$SQUASHFS_CHECK/sbin/l1util" ]; then
+	mode=$(stat -c "%a" "$SQUASHFS_CHECK/sbin/l1util")
+	if [ "$mode" != "755" ]; then
+		echo "Bad squashfs mode for sbin/l1util: got $mode, expected 755"
+		exit 1
+	fi
+	stat -c "%a %n" "$SQUASHFS_CHECK/sbin/l1util"
+else
+	echo "Optional squashfs sbin/l1util is not selected by the upstream 360T7 defconfig; skipping."
+fi
 
 check_squashfs_link() {
 	local path="$1"
