@@ -31,6 +31,7 @@ apply_source_patches() {
 
 fix_360t7_source_permissions() {
 	local file
+	local pattern
 
 	[ ! -d "./package/base-files/files/etc/init.d" ] || \
 		find ./package/base-files/files/etc/init.d -type f -exec chmod 0755 {} +
@@ -48,6 +49,14 @@ fix_360t7_source_permissions() {
 		./package/base-files/files/sbin/procd
 	do
 		[ ! -e "$file" ] || chmod 0755 "$file"
+	done
+
+	for pattern in \
+		"*/files/etc/hotplug.d/net/10-mtwifi-detect" \
+		"*/files/lib/wifi/mtwifi.sh" \
+		"*/files/lib/netifd/wireless/mtwifi.sh"
+	do
+		find ./package ./feeds -path "$pattern" -type f -exec chmod 0755 {} + 2>/dev/null || true
 	done
 }
 
