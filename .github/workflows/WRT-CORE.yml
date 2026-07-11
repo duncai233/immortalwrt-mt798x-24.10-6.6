@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-#云编译公用核心
 name: WRT-CORE
 
 on:
@@ -102,13 +101,11 @@ jobs:
 
           cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $GITHUB_ENV
 
-          # 如果不存在 defconfig 则直接结束工作流
           if [ ! -d "defconfig" ]; then
             echo "defconfig directory not found, stopping workflow."
             exit 0
           fi
 
-          # GitHub Action 移除国内下载源
           PROJECT_MIRRORS_FILE="./scripts/projectsmirrors.json"
           if [ -f "$PROJECT_MIRRORS_FILE" ]; then
             sed -i '/.cn\//d; /tencent/d; /aliyun/d' "$PROJECT_MIRRORS_FILE"
@@ -172,7 +169,15 @@ jobs:
         run: |
           cd ./wrt/
 
-          if [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
+          if [[ "${WRT_CONFIG,,}" == "mt7981-360t7" ]]; then
+            if [ ! -f "./defconfig/mt7981-ax3000.config" ]; then
+              echo "Upstream defconfig/mt7981-ax3000.config not found."
+              exit 1
+            fi
+
+            grep -vE '^(CONFIG_TARGET_mediatek(_.*)?=|CONFIG_TARGET_mediatek_filogic_DEVICE_|CONFIG_TARGET_DEVICE_|CONFIG_TARGET_MULTI_PROFILE=|CONFIG_TARGET_PER_DEVICE_ROOTFS=|CONFIG_HAS_SUBTARGETS=)' ./defconfig/mt7981-ax3000.config >> .config
+            cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt >> .config
+          elif [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
             cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt >> .config
           else
             cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt $GITHUB_WORKSPACE/Config/GENERAL.txt >> .config
@@ -195,6 +200,247 @@ jobs:
           cd ./wrt/
 
           make -j$(nproc) || make -j1 V=s
+
+      - name: Verify 360T7 Firmware
+        if: env.WRT_TEST != 'true'
+        run: |
+          cd ./wrt/
+
+          if [[ "${WRT_CONFIG,,}" != "mt7981-360t7" ]]; then
+            exit 0
+          fi
+
+          ROOTFS_DIR=$(find ./staging_dir -maxdepth 2 -type d -name "root-*" | head -n 1)
+          if [ -z "$ROOTFS_DIR" ]; then
+            echo "Cannot find target rootfs directory under staging_dir."
+            exit 1
+          fi
+          BG_SHA=$(sha256sum "$GITHUB_WORKSPACE/bg1.jpg" | awk '{print $1}')
+
+          check_mode_in_root() {
+            local root="$1"
+            local path="$2"
+            local expected="$3"
+            local mode
+
+            if [ ! -e "$root/$path" ]; then
+              echo "Missing $path in $root"
+              exit 1
+            fi
+
+            mode=$(stat -c "%a" "$root/$path")
+            if [ "$mode" != "$expected" ]; then
+              echo "Bad mode for $path in $root: got $mode, expected $expected"
+              exit 1
+            fi
+            stat -c "%a %n" "$root/$path"
+          }
+
+          check_link_in_root() {
+            local root="$1"
+            local path="$2"
+            local expected="$3"
+            local target
+
+            if [ ! -L "$root/$path" ]; then
+              echo "Missing symlink $path in $root"
+              exit 1
+            fi
+
+            target=$(readlink "$root/$path")
+            if [ "$target" != "$expected" ]; then
+              echo "Bad symlink for $path in $root: got $target, expected $expected"
+              exit 1
+            fi
+            echo "$path -> $target"
+          }
+
+          check_360t7_root() {
+            local root="$1"
+            local path
+            local actual_bg_sha
+
+            for path in \
+              bin/config_generate \
+              bin/board_detect \
+              bin/ipcalc.sh \
+              sbin/ifup \
+              sbin/ifdown \
+              sbin/devstatus \
+              sbin/wifi \
+              sbin/mtwifi_cfg \
+              sbin/l1util \
+              lib/wifi/mtwifi.sh \
+              lib/netifd/wireless/mtwifi.sh \
+              etc/hotplug.d/net/10-mtwifi-detect \
+              usr/libexec/login.sh \
+              etc/init.d/network \
+              etc/init.d/dnsmasq \
+              etc/init.d/dropbear \
+              etc/init.d/uhttpd \
+              etc/init.d/firewall \
+              etc/init.d/rpcd \
+              etc/rc.common \
+              bin/busybox \
+              sbin/procd
+            do
+              check_mode_in_root "$root" "$path" 755
+            done
+
+            check_link_in_root "$root" etc/rc.d/S19dnsmasq ../init.d/dnsmasq
+            check_link_in_root "$root" etc/rc.d/S19dropbear ../init.d/dropbear
+            check_link_in_root "$root" etc/rc.d/S50uhttpd ../init.d/uhttpd
+
+            awk '
+              /qihoo,360t7\)/ { in_case = 1 }
+              in_case && /ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" wan/ { ok = 1 }
+              in_case && /ucidef_set_interface_lan "lan1 lan2 lan3 wan"/ { bad = 1 }
+              in_case && /;;/ { in_case = 0 }
+              END { exit((ok && !bad) ? 0 : 1) }
+            ' "$root/etc/board.d/02_network" || {
+              echo "360T7 network layout is not lan1/lan2/lan3 LAN + wan WAN"
+              exit 1
+            }
+
+            grep -q "192.168.1.1" "$root/bin/config_generate" || {
+              echo "LAN default IP is not 192.168.1.1 in config_generate"
+              exit 1
+            }
+
+            grep -q "hostname='360T7'" "$root/bin/config_generate" || {
+              echo "Default hostname is not 360T7 in config_generate"
+              exit 1
+            }
+
+            grep -q "set system.@system\\[0\\].hostname='360T7'" "$root/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+              echo "360T7 uci-defaults does not set hostname"
+              exit 1
+            }
+
+            grep -q "set dhcp.lan.dhcpv4='server'" "$root/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+              echo "360T7 uci-defaults does not force LAN DHCPv4 server"
+              exit 1
+            }
+
+            grep -q "modprobe mt_wifi" "$root/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+              echo "360T7 uci-defaults does not load MTK WiFi"
+              exit 1
+            }
+
+            grep -q "/sbin/wifi config" "$root/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+              echo "360T7 uci-defaults does not call upstream WiFi config generator"
+              exit 1
+            }
+
+            grep -q "0.0.0.0:80" "$root/etc/config/uhttpd" || {
+              echo "uhttpd does not listen on 0.0.0.0:80"
+              exit 1
+            }
+
+            grep -q "0.0.0.0:443" "$root/etc/config/uhttpd" || {
+              echo "uhttpd does not listen on 0.0.0.0:443"
+              exit 1
+            }
+
+            grep -Eq "config dhcp ['\"]?lan['\"]?" "$root/etc/config/dhcp" || {
+              echo "Missing LAN DHCP section"
+              exit 1
+            }
+
+            grep -Eq "option dhcpv4[[:space:]]+['\"]?server['\"]?" "$root/etc/config/dhcp" || {
+              echo "LAN DHCPv4 server option is missing"
+              exit 1
+            }
+
+            grep -Eq "config dhcp ['\"]?wan['\"]?" "$root/etc/config/dhcp" || {
+              echo "Missing WAN DHCP section"
+              exit 1
+            }
+
+            grep -Eq "option ignore[[:space:]]+['\"]?1['\"]?" "$root/etc/config/dhcp" || {
+              echo "WAN DHCP ignore option is missing"
+              exit 1
+            }
+
+            grep -q "^mt_wifi" "$root/etc/modules.d/mt_wifi" || {
+              echo "mt_wifi is not configured for module autoload"
+              exit 1
+            }
+
+            for path in \
+              etc/wireless/l1profile.dat \
+              etc/wireless/mediatek/mt7981.dbdc.b0.dat \
+              etc/wireless/mediatek/mt7981.dbdc.b1.dat \
+              www/luci-static/argon/background/bg1.jpg
+            do
+              [ -s "$root/$path" ] || {
+                echo "Missing required file: $path"
+                exit 1
+              }
+              ls -l "$root/$path"
+            done
+
+            actual_bg_sha=$(sha256sum "$root/www/luci-static/argon/background/bg1.jpg" | awk '{print $1}')
+            if [ "$actual_bg_sha" != "$BG_SHA" ]; then
+              echo "Argon bg1.jpg sha256 mismatch: got $actual_bg_sha, expected $BG_SHA"
+              exit 1
+            fi
+
+            grep -q "option online_wallpaper 'none'" "$root/etc/config/argon" || {
+              echo "Argon local wallpaper mode was not applied"
+              exit 1
+            }
+          }
+
+          check_360t7_root "$ROOTFS_DIR"
+
+          MANIFEST=$(find ./bin/targets -type f -name '*qihoo_360t7.manifest' | head -n 1)
+          [ -n "$MANIFEST" ] || {
+            echo "Missing 360T7 firmware manifest"
+            exit 1
+          }
+
+          for pkg in \
+            dnsmasq-full \
+            dropbear \
+            uhttpd \
+            luci-theme-argon \
+            luci-app-argon-config \
+            kmod-mediatek_hnat \
+            kmod-warp \
+            luci-app-turboacc-mtk \
+            luci-app-eqos-mtk \
+            kmod-mt_wifi \
+            mtwifi-cfg \
+            wifi-scripts \
+            wifi-dats \
+            wpad-openssl \
+            luci-app-mtwifi-cfg
+          do
+            grep -q "^${pkg} " "$MANIFEST" || {
+              echo "Missing package in manifest: $pkg"
+              exit 1
+            }
+            grep "^${pkg} " "$MANIFEST"
+          done
+
+          ROOTFS_IMG=$(find ./build_dir -path './build_dir/host*' -prune -o -type f -name 'root.squashfs' -print | head -n 1)
+          [ -n "$ROOTFS_IMG" ] || {
+            echo "Cannot find final root.squashfs under build_dir."
+            exit 1
+          }
+
+          UNSQUASHFS="./staging_dir/host/bin/unsquashfs"
+          [ -x "$UNSQUASHFS" ] || UNSQUASHFS="$(command -v unsquashfs || true)"
+          [ -n "$UNSQUASHFS" ] || {
+            echo "Cannot find unsquashfs."
+            exit 1
+          }
+
+          SQUASHFS_CHECK="./tmp/360t7-squashfs-check"
+          rm -rf "$SQUASHFS_CHECK"
+          "$UNSQUASHFS" -q -d "$SQUASHFS_CHECK" "$ROOTFS_IMG"
+          check_360t7_root "$SQUASHFS_CHECK"
 
       - name: Machine Information
         run: |
@@ -238,24 +484,15 @@ jobs:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
           files: ./wrt/upload/*.*
           body: |
-            这是个平台固件包，内含多个设备！
-            请注意选择你需要的设备固件！
-            不要问，刷就完事了！
-
-            全系带闭源硬件加速，别问了！
-
-            源码：${{env.WRT_REPO}}
-            分支：${{env.WRT_BRANCH}}
-            提交：${{env.WRT_HASH}}
-
-            配置：${{env.WRT_CONFIG}}
-            平台：${{env.WRT_TARGET}}
-
-            登录地址：${{env.WRT_IP}}
-            登录密码：${{env.WRT_PW}}
-
-            WIFI名称：${{env.WRT_SSID}}
-            WIFI密码：${{env.WRT_WORD}}
-
-            内核版本：${{env.WRT_KVER}}
-            插件列表：${{env.WRT_LIST}}
+            360T7 weekly production build.
+            Source: ${{ env.WRT_REPO }}
+            Branch: ${{ env.WRT_BRANCH }}
+            Commit: ${{ env.WRT_HASH }}
+            Config: ${{ env.WRT_CONFIG }}
+            Target: ${{ env.WRT_TARGET }}
+            Login: http://${{ env.WRT_IP }}/
+            Hostname: 360T7
+            WiFi: upstream MTK defaults, generated on first boot
+            Kernel: ${{ env.WRT_KVER }}
+            LuCI packages: ${{ env.WRT_LIST }}
+            Includes: MTK HNAT/WARP, MTK WiFi, Argon static bg1.jpg, LAN DHCP, LuCI, SSH

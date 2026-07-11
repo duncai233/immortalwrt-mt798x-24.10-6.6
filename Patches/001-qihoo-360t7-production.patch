@@ -1,0 +1,248 @@
+diff --git a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
+index 0b2e748..27aeac0 100755
+--- a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
++++ b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
+@@ -58,17 +58,19 @@ mediatek_setup_interfaces()
+ 	jcg,q30-pro|\
+ 	keenetic,kn3811|\
+ 	netis,nx32u|\
+ 	livinet,zr-3020|\
+ 	livinet,zr-3020-ubootmod|\
+-	qihoo,360t7|\
+ 	tplink,wma301*|\
+ 	*philips,hy3000*|\
+ 	sl,3000-emmc|\
+ 	bt,r320|\
+ 	routerich,ax3000|\
+ 	routerich,ax3000-ubootmod)
+ 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" wan
+ 		;;
++	qihoo,360t7)
++		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" wan
++		;;
+ 	asus,tuf-ax4200|\
+ 	jdcloud,re-cp-03|\
+ 	mediatek,mt7981-rfb|\
+@@ -240,7 +240,9 @@ mediatek_setup_macs()
+ 	qihoo,360t7)
+ 		lan_mac=$(mtd_get_mac_ascii factory lanMac)
+-		wan_mac=$(macaddr_add "$lan_mac" 1)
+-		label_mac=$wan_mac
++		if [ -n "$lan_mac" ]; then
++			wan_mac=$(macaddr_add "$lan_mac" 1)
++			label_mac=$wan_mac
++		fi
+ 		;;
+ 	ruijie,ew-6000gx-pro*|\
+ 	ruijie,rg-x60*)
+diff --git a/package/Makefile b/package/Makefile
+--- a/package/Makefile
++++ b/package/Makefile
+@@ -115,9 +115,26 @@ $(curdir)/install: $(TMP_DIR)/.build $(curdir)/merge $(curdir)/merge-index
+ 	done || true
+ endif
+ 
++	@echo "Fixing rootfs executable permissions before rootfs backup"
++	@[ ! -d "$(TARGET_DIR)/etc/init.d" ] || find "$(TARGET_DIR)/etc/init.d" -type f -exec chmod 0755 {} +
++	@for dir in bin sbin usr/bin usr/sbin usr/libexec; do [ ! -d "$(TARGET_DIR)/$$dir" ] || find "$(TARGET_DIR)/$$dir" -maxdepth 1 -type f -exec chmod 0755 {} +; done
++	@for dir in etc/board.d etc/uci-defaults etc/hotplug.d lib/preinit lib/netifd lib/wifi; do [ ! -d "$(TARGET_DIR)/$$dir" ] || find "$(TARGET_DIR)/$$dir" -type f -exec chmod 0755 {} +; done
++	@[ ! -f "$(TARGET_DIR)/usr/libexec/login.sh" ] || chmod 0755 "$(TARGET_DIR)/usr/libexec/login.sh"
++	@[ ! -f "$(TARGET_DIR)/etc/rc.common" ] || chmod 0755 "$(TARGET_DIR)/etc/rc.common"
++	@[ ! -f "$(TARGET_DIR)/bin/busybox" ] || chmod 0755 "$(TARGET_DIR)/bin/busybox"
++	@[ ! -f "$(TARGET_DIR)/sbin/procd" ] || chmod 0755 "$(TARGET_DIR)/sbin/procd"
++
+ 	$(CP) $(TARGET_DIR) $(TARGET_DIR_ORIG)
+ 
+ 	$(call prepare_rootfs,$(TARGET_DIR),$(TOPDIR)/files)
++	@echo "Fixing rootfs executable permissions before image build"
++	@[ ! -d "$(TARGET_DIR)/etc/init.d" ] || find "$(TARGET_DIR)/etc/init.d" -type f -exec chmod 0755 {} +
++	@for dir in bin sbin usr/bin usr/sbin usr/libexec; do [ ! -d "$(TARGET_DIR)/$$dir" ] || find "$(TARGET_DIR)/$$dir" -maxdepth 1 -type f -exec chmod 0755 {} +; done
++	@for dir in etc/board.d etc/uci-defaults etc/hotplug.d lib/preinit lib/netifd lib/wifi; do [ ! -d "$(TARGET_DIR)/$$dir" ] || find "$(TARGET_DIR)/$$dir" -type f -exec chmod 0755 {} +; done
++	@[ ! -f "$(TARGET_DIR)/usr/libexec/login.sh" ] || chmod 0755 "$(TARGET_DIR)/usr/libexec/login.sh"
++	@[ ! -f "$(TARGET_DIR)/etc/rc.common" ] || chmod 0755 "$(TARGET_DIR)/etc/rc.common"
++	@[ ! -f "$(TARGET_DIR)/bin/busybox" ] || chmod 0755 "$(TARGET_DIR)/bin/busybox"
++	@[ ! -f "$(TARGET_DIR)/sbin/procd" ] || chmod 0755 "$(TARGET_DIR)/sbin/procd"
+ 
+ $(curdir)/index: FORCE
+ 	@echo Generating package index...
+diff --git a/package/base-files/files/bin/config_generate b/package/base-files/files/bin/config_generate
+--- a/package/base-files/files/bin/config_generate
++++ b/package/base-files/files/bin/config_generate
+@@ -169,5 +169,8 @@ generate_static_network() {
+ 				lan)
+ 					case "$board" in
++						qihoo,360t7)
++							ipad=${ipaddr:-"192.168.1.1"}
++						;;
+ 						ruijie,ew-6000gx-pro*|\
+ 						ruijie,rg-x60*)
+ 							ipad=${ipaddr:-"192.168.110.1"}
+@@ -307,7 +310,7 @@ generate_static_system() {
+ 	uci -q batch <<-EOF
+ 		delete system.@system[0]
+ 		add system system
+-		set system.@system[-1].hostname='ImmortalWrt'
++		set system.@system[-1].hostname='360T7'
+ 		set system.@system[-1].timezone='UTC'
+ 		set system.@system[-1].ttylogin='0'
+ 		set system.@system[-1].log_size='128'
+diff --git a/package/network/services/dnsmasq/files/dhcp.conf b/package/network/services/dnsmasq/files/dhcp.conf
+--- a/package/network/services/dnsmasq/files/dhcp.conf
++++ b/package/network/services/dnsmasq/files/dhcp.conf
+@@ -29,6 +29,7 @@ config dhcp lan
+ 	option start 	100
+ 	option limit	150
+ 	option leasetime	12h
++	option dhcpv4	server
+ 
+ config dhcp wan
+ 	option interface	wan
+diff --git a/target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults
+new file mode 100755
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults
+@@ -0,0 +1,92 @@
++#!/bin/sh
++
++. /lib/functions.sh
++
++board="$(board_name)"
++[ "$board" = "qihoo,360t7" ] || exit 0
++
++[ -s /etc/board.json ] || /bin/board_detect /etc/board.json 2>/dev/null || true
++
++if ! uci -q get system.@system[0] >/dev/null || ! uci -q get network.lan >/dev/null; then
++	/bin/config_generate 2>/dev/null || true
++fi
++
++uci -q get system.@system[0] >/dev/null || uci -q add system system >/dev/null
++uci -q batch <<-EOF
++	set system.@system[0].hostname='360T7'
++	commit system
++EOF
++
++if ! uci -q get network.lan >/dev/null || ! uci -q get network.wan >/dev/null; then
++	uci -q batch <<-EOF
++		delete network.br_lan
++		delete network.lan
++		delete network.wan
++		delete network.wan6
++		set network.br_lan='device'
++		set network.br_lan.name='br-lan'
++		set network.br_lan.type='bridge'
++		add_list network.br_lan.ports='lan1'
++		add_list network.br_lan.ports='lan2'
++		add_list network.br_lan.ports='lan3'
++		set network.lan='interface'
++		set network.lan.device='br-lan'
++		set network.lan.proto='static'
++		set network.lan.ipaddr='192.168.1.1'
++		set network.lan.netmask='255.255.255.0'
++		set network.lan.ip6assign='60'
++		set network.wan='interface'
++		set network.wan.device='wan'
++		set network.wan.proto='dhcp'
++		set network.wan6='interface'
++		set network.wan6.device='wan'
++		set network.wan6.proto='dhcpv6'
++		commit network
++	EOF
++else
++	uci -q batch <<-EOF
++		set network.lan.device='br-lan'
++		set network.lan.proto='static'
++		set network.lan.ipaddr='192.168.1.1'
++		set network.lan.netmask='255.255.255.0'
++		set network.lan.ip6assign='60'
++		set network.wan.device='wan'
++		set network.wan.proto='dhcp'
++		set network.wan6.device='wan'
++		set network.wan6.proto='dhcpv6'
++		commit network
++	EOF
++fi
++
++uci -q batch <<-EOF
++	set dhcp.lan='dhcp'
++	set dhcp.lan.interface='lan'
++	set dhcp.lan.start='100'
++	set dhcp.lan.limit='150'
++	set dhcp.lan.leasetime='12h'
++	delete dhcp.lan.ignore
++	set dhcp.lan.dhcpv4='server'
++	set dhcp.wan='dhcp'
++	set dhcp.wan.interface='wan'
++	set dhcp.wan.ignore='1'
++	commit dhcp
++EOF
++
++uci -q delete turboacc.config.fastpath_mh_eth_hnat_ap
++uci -q commit turboacc
++
++if [ ! -s /etc/config/wireless ] || ! uci -q show wireless | grep -q '=wifi-device'; then
++	modprobe mt_wifi 2>/dev/null || true
++	sleep 2
++	/sbin/wifi config 2>/dev/null || true
++fi
++
++if uci -q show wireless | grep -q '=wifi-device'; then
++	/sbin/wifi up 2>/dev/null || true
++fi
++
++[ -x /etc/init.d/network ] && /etc/init.d/network enable
++[ -x /etc/init.d/dnsmasq ] && /etc/init.d/dnsmasq enable
++[ -x /etc/init.d/uhttpd ] && /etc/init.d/uhttpd enable
++[ -x /etc/init.d/dropbear ] && /etc/init.d/dropbear enable
++exit 0
+diff --git a/include/image.mk b/include/image.mk
+--- a/include/image.mk
++++ b/include/image.mk
+@@ -17,6 +17,16 @@ endif
+ 
+ include $(INCLUDE_DIR)/feeds.mk
+ include $(INCLUDE_DIR)/rootfs.mk
++
++define fix_rootfs_exec_permissions
++	@[ ! -d "$(1)/etc/init.d" ] || find "$(1)/etc/init.d" -type f -exec chmod 0755 {} +
++	@for dir in bin sbin usr/bin usr/sbin usr/libexec; do [ ! -d "$(1)/$$dir" ] || find "$(1)/$$dir" -maxdepth 1 -type f -exec chmod 0755 {} +; done
++	@for dir in etc/board.d etc/uci-defaults etc/hotplug.d lib/preinit lib/netifd lib/wifi; do [ ! -d "$(1)/$$dir" ] || find "$(1)/$$dir" -type f -exec chmod 0755 {} +; done
++	@[ ! -f "$(1)/usr/libexec/login.sh" ] || chmod 0755 "$(1)/usr/libexec/login.sh"
++	@[ ! -f "$(1)/etc/rc.common" ] || chmod 0755 "$(1)/etc/rc.common"
++	@[ ! -f "$(1)/bin/busybox" ] || chmod 0755 "$(1)/bin/busybox"
++	@[ ! -f "$(1)/sbin/procd" ] || chmod 0755 "$(1)/sbin/procd"
++endef
+ 
+ override MAKE:=$(_SINGLE)$(SUBMAKE)
+ override NO_TRACE_MAKE:=$(_SINGLE)$(NO_TRACE_MAKE)
+@@ -394,8 +402,10 @@ else
+ 	rm -rf $(mkfs_cur_target_dir).opkg $(mkfs_cur_target_dir).conf
+ endif
+ 	$(call prepare_rootfs,$(mkfs_cur_target_dir),$(TOPDIR)/files)
++	$(call fix_rootfs_exec_permissions,$(mkfs_cur_target_dir))
+ 
+ $(KDIR)/root.%: kernel_prepare
++	$(call fix_rootfs_exec_permissions,$(call mkfs_target_dir,$(target_params)))
+ 	$(call Image/mkfs/$(word 1,$(target_params)),$(target_params))
+ 
+ define Device/InitProfile
+diff --git a/target/linux/mediatek/filogic/base-files/lib/preinit/10_fix_eth_mac.sh b/target/linux/mediatek/filogic/base-files/lib/preinit/10_fix_eth_mac.sh
+index 468d71f..2d7bf1f 100644
+--- a/target/linux/mediatek/filogic/base-files/lib/preinit/10_fix_eth_mac.sh
++++ b/target/linux/mediatek/filogic/base-files/lib/preinit/10_fix_eth_mac.sh
+@@ -24,6 +24,16 @@ preinit_set_mac_address() {
+ 		addr=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
+ 		ip link set dev eth1 address "$(macaddr_add $addr 1)"
+ 		;;
++	qihoo,360t7)
++		lan_mac=$(mtd_get_mac_ascii factory lanMac)
++		if [ -n "$lan_mac" ]; then
++			ip link set dev eth0 address "$lan_mac" 2>/dev/null
++			ip link set dev lan1 address "$lan_mac" 2>/dev/null
++			ip link set dev lan2 address "$lan_mac" 2>/dev/null
++			ip link set dev lan3 address "$lan_mac" 2>/dev/null
++			ip link set dev wan address "$(macaddr_add "$lan_mac" 1)" 2>/dev/null
++		fi
++		;;
+ 	*)
+ 		;;
+ 	esac

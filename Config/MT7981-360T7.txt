@@ -1,0 +1,19 @@
+# Base package options are imported from upstream defconfig/mt7981-ax3000.config.
+# This overlay fixes target/profile selection and keeps basic first-boot access paths explicit.
+# Package choices come from upstream defconfig/mt7981-ax3000.config for a production build.
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+# CONFIG_TARGET_MULTI_PROFILE is not set
+# CONFIG_TARGET_PER_DEVICE_ROOTFS is not set
+CONFIG_TARGET_ROOTFS_INITRAMFS=n
+CONFIG_TARGET_mediatek_filogic_DEVICE_qihoo_360t7=y
+CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_qihoo_360t7=""
+
+# Keep basic access paths explicit.
+# CONFIG_PACKAGE_dnsmasq is not set
+CONFIG_PACKAGE_dnsmasq-full=y
+CONFIG_PACKAGE_dropbear=y
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_netifd=y
+CONFIG_PACKAGE_odhcpd-ipv6only=y
+CONFIG_PACKAGE_uhttpd=y
