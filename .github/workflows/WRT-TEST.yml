@@ -34,14 +34,6 @@ on:
         default: true
         required: true
         type: boolean
-      WIFI_PROFILE:
-        description: '360T7 WiFi profile'
-        default: stable
-        required: true
-        type: choice
-        options:
-          - stable
-          - performance
 
 permissions: write-all
 
@@ -56,7 +48,6 @@ jobs:
       WRT_NAME: 360T7
       WRT_SSID: ImmortalWrt-2.4G / ImmortalWrt-5G
       WRT_WORD: none
-      WRT_WIFI_PROFILE: ${{ inputs.WIFI_PROFILE }}
       WRT_IP: 192.168.1.1
       WRT_PW: none
       WRT_REPO: https://github.com/${{ inputs.SOURCE }}.git
