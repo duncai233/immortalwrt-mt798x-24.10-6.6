@@ -10,6 +10,7 @@ DATE="$(TZ=UTC-8 date +%y.%m.%d-%H.%M.%S)"
 PATCH="$WORK/001-qihoo-360t7-production.patch"
 OVERLAY="$WORK/MT7981-360T7.txt"
 BG_IMAGE="${BG_IMAGE:-$WORK/bg1.jpg}"
+WRT_WIFI_PROFILE="${WRT_WIFI_PROFILE:-stable}"
 
 mkdir -p "$LOGDIR" "$OUTDIR"
 cd "$BUILD"
@@ -17,6 +18,7 @@ cd "$BUILD"
 echo "== $(date -Is) production build for qihoo_360t7 =="
 echo "cwd=$(pwd)"
 echo "jobs=$JOBS"
+echo "wifi_profile=$WRT_WIFI_PROFILE"
 echo "head=$(git rev-parse --short HEAD)"
 
 git status --short > "$LOGDIR/status.before.production.$DATE.txt" || true
@@ -27,9 +29,27 @@ export CCACHE_DIR="$BUILD/.ccache"
 # Start from upstream source, then apply only the production 360T7 fixes.
 git reset --hard HEAD
 rm -f ./target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults
+rm -f ./target/linux/mediatek/filogic/base-files/etc/360t7-wifi-profile
+rm -f ./target/linux/mediatek/filogic/base-files/usr/sbin/360t7-wifi-profile
 
 git apply --check "$PATCH"
 git apply "$PATCH"
+
+case "$WRT_WIFI_PROFILE" in
+	stable|performance)
+		;;
+	compat)
+		WRT_WIFI_PROFILE="stable"
+		;;
+	default|upstream)
+		WRT_WIFI_PROFILE="performance"
+		;;
+	*)
+		echo "Unsupported WRT_WIFI_PROFILE=$WRT_WIFI_PROFILE"
+		exit 1
+		;;
+esac
+printf "profile=%s\n" "$WRT_WIFI_PROFILE" > ./target/linux/mediatek/filogic/base-files/etc/360t7-wifi-profile
 
 cp -f .config "$LOGDIR/config.before.production.$DATE" 2>/dev/null || true
 rm -f .config .config.old
@@ -290,6 +310,7 @@ for path in \
 	sbin/wifi \
 	sbin/mtwifi_cfg \
 	sbin/l1util \
+	usr/sbin/360t7-wifi-profile \
 	lib/wifi/mtwifi.sh \
 	lib/netifd/wireless/mtwifi.sh \
 	etc/hotplug.d/net/10-mtwifi-detect \
@@ -351,6 +372,26 @@ grep -q "modprobe mt_wifi" "$ROOTFS_DIR/etc/uci-defaults/zz_qihoo_360t7-defaults
 
 grep -q "/sbin/wifi config" "$ROOTFS_DIR/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
 	echo "360T7 late uci-defaults does not call upstream WiFi config generator"
+	exit 1
+}
+
+grep -q "360t7-wifi-profile" "$ROOTFS_DIR/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+	echo "360T7 late uci-defaults does not apply the WiFi profile"
+	exit 1
+}
+
+grep -q "^profile=${WRT_WIFI_PROFILE}$" "$ROOTFS_DIR/etc/360t7-wifi-profile" || {
+	echo "360T7 WiFi profile config is not $WRT_WIFI_PROFILE in rootfs"
+	exit 1
+}
+
+grep -q "HE80" "$ROOTFS_DIR/usr/sbin/360t7-wifi-profile" || {
+	echo "360T7 stable WiFi profile is missing HE80 in rootfs"
+	exit 1
+}
+
+grep -q "HE160" "$ROOTFS_DIR/usr/sbin/360t7-wifi-profile" || {
+	echo "360T7 performance WiFi profile is missing HE160 in rootfs"
 	exit 1
 }
 
@@ -451,6 +492,7 @@ for path in \
 	sbin/wifi \
 	sbin/mtwifi_cfg \
 	sbin/l1util \
+	usr/sbin/360t7-wifi-profile \
 	lib/wifi/mtwifi.sh \
 	lib/netifd/wireless/mtwifi.sh \
 	etc/hotplug.d/net/10-mtwifi-detect \
@@ -536,6 +578,26 @@ grep -q "modprobe mt_wifi" "$SQUASHFS_CHECK/etc/uci-defaults/zz_qihoo_360t7-defa
 
 grep -q "/sbin/wifi config" "$SQUASHFS_CHECK/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
 	echo "360T7 late uci-defaults does not call upstream WiFi config generator in squashfs"
+	exit 1
+}
+
+grep -q "360t7-wifi-profile" "$SQUASHFS_CHECK/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+	echo "360T7 late uci-defaults does not apply the WiFi profile in squashfs"
+	exit 1
+}
+
+grep -q "^profile=${WRT_WIFI_PROFILE}$" "$SQUASHFS_CHECK/etc/360t7-wifi-profile" || {
+	echo "360T7 WiFi profile config is not $WRT_WIFI_PROFILE in squashfs"
+	exit 1
+}
+
+grep -q "HE80" "$SQUASHFS_CHECK/usr/sbin/360t7-wifi-profile" || {
+	echo "360T7 stable WiFi profile is missing HE80 in squashfs"
+	exit 1
+}
+
+grep -q "HE160" "$SQUASHFS_CHECK/usr/sbin/360t7-wifi-profile" || {
+	echo "360T7 performance WiFi profile is missing HE160 in squashfs"
 	exit 1
 }
 

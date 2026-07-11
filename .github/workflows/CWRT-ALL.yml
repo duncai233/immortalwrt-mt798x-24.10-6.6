@@ -18,6 +18,14 @@ on:
         default: false
         required: false
         type: boolean
+      WIFI_PROFILE:
+        description: '360T7 WiFi profile: stable lowers disconnect risk, performance keeps upstream HE160'
+        default: stable
+        required: false
+        type: choice
+        options:
+          - stable
+          - performance
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,6 +64,7 @@ jobs:
       WRT_NAME: 360T7
       WRT_SSID: ImmortalWrt-2.4G / ImmortalWrt-5G
       WRT_WORD: none
+      WRT_WIFI_PROFILE: ${{ github.event.inputs.WIFI_PROFILE || 'stable' }}
       WRT_IP: 192.168.1.1
       WRT_PW: none
       WRT_REPO: https://github.com/${{ matrix.REPO_INFO.SOURCE }}.git

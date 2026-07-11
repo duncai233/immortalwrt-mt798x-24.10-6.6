@@ -97,11 +97,17 @@ diff --git a/package/network/services/dnsmasq/files/dhcp.conf b/package/network/
  
  config dhcp wan
  	option interface	wan
+diff --git a/target/linux/mediatek/filogic/base-files/etc/360t7-wifi-profile b/target/linux/mediatek/filogic/base-files/etc/360t7-wifi-profile
+new file mode 100644
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/etc/360t7-wifi-profile
+@@ -0,0 +1 @@
++profile=stable
 diff --git a/target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults
 new file mode 100755
 --- /dev/null
 +++ b/target/linux/mediatek/filogic/base-files/etc/uci-defaults/zz_qihoo_360t7-defaults
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,97 @@
 +#!/bin/sh
 +
 +. /lib/functions.sh
@@ -186,6 +192,11 @@ new file mode 100755
 +fi
 +
 +if uci -q show wireless | grep -q '=wifi-device'; then
++	if [ -x /usr/sbin/360t7-wifi-profile ]; then
++		wifi_profile="$(sed -n 's/^profile=//p' /etc/360t7-wifi-profile 2>/dev/null | head -n 1)"
++		[ -n "$wifi_profile" ] || wifi_profile="stable"
++		/usr/sbin/360t7-wifi-profile "$wifi_profile" no-reload 2>/dev/null || true
++	fi
 +	/sbin/wifi up 2>/dev/null || true
 +fi
 +
@@ -193,6 +204,122 @@ new file mode 100755
 +[ -x /etc/init.d/dnsmasq ] && /etc/init.d/dnsmasq enable
 +[ -x /etc/init.d/uhttpd ] && /etc/init.d/uhttpd enable
 +[ -x /etc/init.d/dropbear ] && /etc/init.d/dropbear enable
++exit 0
+diff --git a/target/linux/mediatek/filogic/base-files/usr/sbin/360t7-wifi-profile b/target/linux/mediatek/filogic/base-files/usr/sbin/360t7-wifi-profile
+new file mode 100755
+--- /dev/null
++++ b/target/linux/mediatek/filogic/base-files/usr/sbin/360t7-wifi-profile
+@@ -0,0 +1,111 @@
++#!/bin/sh
++set -u
++
++CONFIG_FILE="/etc/360t7-wifi-profile"
++PROFILE="${1:-}"
++RELOAD="1"
++
++read_default_profile() {
++	sed -n 's/^profile=//p' "$CONFIG_FILE" 2>/dev/null | head -n 1
++}
++
++case "$PROFILE" in
++	"" )
++		PROFILE="$(read_default_profile)"
++		;;
++	no-reload|--no-reload )
++		PROFILE="$(read_default_profile)"
++		RELOAD="0"
++		;;
++esac
++
++case "${2:-}" in
++	no-reload|--no-reload)
++		RELOAD="0"
++		;;
++esac
++
++[ -n "$PROFILE" ] || PROFILE="stable"
++
++case "$PROFILE" in
++	stable|compat)
++		PROFILE="stable"
++		;;
++	performance|default|upstream)
++		PROFILE="performance"
++		;;
++	*)
++		echo "Usage: 360t7-wifi-profile [stable|performance] [no-reload]" >&2
++		exit 2
++		;;
++esac
++
++if ! uci -q show wireless | grep -q '=wifi-device'; then
++	modprobe mt_wifi 2>/dev/null || true
++	sleep 2
++	/sbin/wifi config 2>/dev/null || true
++fi
++
++found=0
++for dev in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-device$/\1/p'); do
++	type="$(uci -q get wireless."$dev".type 2>/dev/null || true)"
++	[ "$type" = "mtwifi" ] || continue
++
++	band="$(uci -q get wireless."$dev".band 2>/dev/null || true)"
++	[ -n "$band" ] || continue
++
++	found=1
++	uci -q batch <<-EOF
++		set wireless.$dev.country='CN'
++		set wireless.$dev.txpower='100'
++		set wireless.$dev.mu_beamformer='1'
++		set wireless.$dev.serialize='1'
++		set wireless.$dev.wapp='0'
++		set wireless.$dev.bandsteering='0'
++		set wireless.$dev.twt='0'
++	EOF
++
++	case "$PROFILE:$band" in
++		stable:2g)
++			uci -q batch <<-EOF
++				set wireless.$dev.channel='auto'
++				set wireless.$dev.htmode='HE20'
++				set wireless.$dev.noscan='0'
++			EOF
++			;;
++		stable:5g)
++			uci -q batch <<-EOF
++				set wireless.$dev.channel='36'
++				set wireless.$dev.htmode='HE80'
++				set wireless.$dev.noscan='0'
++			EOF
++			;;
++		performance:2g)
++			uci -q batch <<-EOF
++				set wireless.$dev.channel='auto'
++				set wireless.$dev.htmode='HE40'
++				set wireless.$dev.noscan='1'
++			EOF
++			;;
++		performance:5g)
++			uci -q batch <<-EOF
++				set wireless.$dev.channel='36'
++				set wireless.$dev.htmode='HE160'
++				set wireless.$dev.noscan='0'
++			EOF
++			;;
++	esac
++done
++
++[ "$found" = "1" ] || {
++	echo "No mtwifi device found." >&2
++	exit 1
++}
++
++uci -q commit wireless
++echo "360T7 WiFi profile applied: $PROFILE"
++
++if [ "$RELOAD" = "1" ]; then
++	/sbin/wifi reload >/dev/null 2>&1 || /sbin/wifi up >/dev/null 2>&1 || true
++fi
 +exit 0
 diff --git a/include/image.mk b/include/image.mk
 --- a/include/image.mk

@@ -21,6 +21,9 @@ on:
       WRT_WORD:
         required: true
         type: string
+      WRT_WIFI_PROFILE:
+        required: false
+        type: string
       WRT_IP:
         required: true
         type: string
@@ -50,6 +53,7 @@ env:
   WRT_NAME: ${{inputs.WRT_NAME}}
   WRT_SSID: ${{inputs.WRT_SSID}}
   WRT_WORD: ${{inputs.WRT_WORD}}
+  WRT_WIFI_PROFILE: ${{inputs.WRT_WIFI_PROFILE}}
   WRT_IP: ${{inputs.WRT_IP}}
   WRT_PW: ${{inputs.WRT_PW}}
   WRT_REPO: ${{inputs.WRT_REPO}}
@@ -270,6 +274,7 @@ jobs:
               sbin/wifi \
               sbin/mtwifi_cfg \
               sbin/l1util \
+              usr/sbin/360t7-wifi-profile \
               lib/wifi/mtwifi.sh \
               lib/netifd/wireless/mtwifi.sh \
               etc/hotplug.d/net/10-mtwifi-detect \
@@ -329,6 +334,26 @@ jobs:
 
             grep -q "/sbin/wifi config" "$root/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
               echo "360T7 uci-defaults does not call upstream WiFi config generator"
+              exit 1
+            }
+
+            grep -q "360t7-wifi-profile" "$root/etc/uci-defaults/zz_qihoo_360t7-defaults" || {
+              echo "360T7 uci-defaults does not apply the WiFi profile"
+              exit 1
+            }
+
+            grep -Eq "^profile=(stable|performance)$" "$root/etc/360t7-wifi-profile" || {
+              echo "360T7 WiFi profile config is missing or invalid"
+              exit 1
+            }
+
+            grep -q "HE80" "$root/usr/sbin/360t7-wifi-profile" || {
+              echo "360T7 stable WiFi profile is missing HE80"
+              exit 1
+            }
+
+            grep -q "HE160" "$root/usr/sbin/360t7-wifi-profile" || {
+              echo "360T7 performance WiFi profile is missing HE160"
               exit 1
             }
 
@@ -492,7 +517,8 @@ jobs:
             Target: ${{ env.WRT_TARGET }}
             Login: http://${{ env.WRT_IP }}/
             Hostname: 360T7
-            WiFi: upstream MTK defaults, generated on first boot
+            WiFi profile: ${{ env.WRT_WIFI_PROFILE || 'stable' }}
+            WiFi notes: stable uses 2.4G HE20 and 5G HE80 channel 36; performance keeps upstream HE160
             Kernel: ${{ env.WRT_KVER }}
             LuCI packages: ${{ env.WRT_LIST }}
             Includes: MTK HNAT/WARP, MTK WiFi, Argon static bg1.jpg, LAN DHCP, LuCI, SSH

@@ -86,12 +86,44 @@ install_argon_static_wallpaper() {
 		"$argon_config"
 }
 
+set_360t7_wifi_profile() {
+	local profile profile_file
+
+	profile="${WRT_WIFI_PROFILE:-stable}"
+	case "$profile" in
+		stable|compat|performance|default|upstream)
+			;;
+		*)
+			echo "Unsupported 360T7 WiFi profile: $profile"
+			exit 1
+			;;
+	esac
+
+	profile_file="./target/linux/mediatek/filogic/base-files/etc/360t7-wifi-profile"
+	[ -f "$profile_file" ] || {
+		echo "Missing 360T7 WiFi profile file after patches: $profile_file"
+		exit 1
+	}
+
+	case "$profile" in
+		compat)
+			profile="stable"
+			;;
+		default|upstream)
+			profile="performance"
+			;;
+	esac
+
+	printf "profile=%s\n" "$profile" > "$profile_file"
+}
+
 IS_360T7=0
 if [[ "${WRT_CONFIG,,}" == *"360t7"* ]]; then
 	IS_360T7=1
 	apply_source_patches
 	fix_360t7_source_permissions
 	install_argon_static_wallpaper
+	set_360t7_wifi_profile
 fi
 
 WIFI_FILE="./package/mtk/applications/mtwifi-cfg/files/mtwifi.sh"
