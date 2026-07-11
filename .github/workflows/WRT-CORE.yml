@@ -45,7 +45,6 @@ on:
 
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-  WRT_MAKE_JOBS: '2'
   WRT_CONFIG: ${{inputs.WRT_CONFIG}}
   WRT_THEME: ${{inputs.WRT_THEME}}
   WRT_NAME: ${{inputs.WRT_NAME}}
@@ -63,7 +62,6 @@ jobs:
   core:
     name: ${{inputs.WRT_SOURCE}}
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     steps:
       - name: Checkout Projects
         uses: actions/checkout@main
@@ -72,11 +70,13 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo -E apt-get -yqq purge firefox || true
-          sudo -E apt-get -yqq update
-          sudo -E apt-get -yqq install dos2unix libfuse-dev
-          sudo -E apt-get -yqq autoremove --purge || true
-          sudo -E apt-get -yqq clean
+          sudo -E apt -yqq purge firefox
+          sudo -E apt -yqq update
+          sudo -E apt -yqq full-upgrade
+          sudo -E apt -yqq autoremove --purge
+          sudo -E apt -yqq autoclean
+          sudo -E apt -yqq clean
+          sudo -E apt -yqq install dos2unix libfuse-dev
           sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E systemctl daemon-reload
           sudo -E timedatectl set-timezone "Asia/Shanghai"
@@ -185,21 +185,21 @@ jobs:
 
           $GITHUB_WORKSPACE/Scripts/Settings.sh
 
-          make defconfig -j$(nproc) && make clean -j"${WRT_MAKE_JOBS}"
+          make defconfig -j$(nproc) && make clean -j$(nproc)
 
       - name: Download Packages
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
 
-          make download -j"${WRT_MAKE_JOBS}"
+          make download -j$(nproc)
 
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
 
-          echo "Compile with WRT_MAKE_JOBS=${WRT_MAKE_JOBS}"
+          echo "Compile with $(nproc) jobs"
           (
             while true; do
               sleep 60
@@ -211,7 +211,7 @@ jobs:
           HEARTBEAT_PID="$!"
           trap 'kill "$HEARTBEAT_PID" 2>/dev/null || true' EXIT
 
-          make -j"${WRT_MAKE_JOBS}" || make -j1 V=s
+          make -j$(nproc) || make -j1 V=s
 
       - name: Verify 360T7 Firmware
         if: env.WRT_TEST != 'true'
